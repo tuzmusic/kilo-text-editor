@@ -92,21 +92,6 @@ void enableRawMode()
     die("tcsetattr");
 }
 
-int getWindowSize(int *rows, int *cols)
-{
-  struct winsize ws;
-
-  // get window size, store in ws
-  if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0)
-  {
-    return -1;
-  }
-
-  *cols = ws.ws_col;
-  *rows = ws.ws_row;
-  return 0;
-}
-
 char editorReadKey()
 {
   int nread;
@@ -121,6 +106,61 @@ char editorReadKey()
       die("read");
   }
   return c;
+}
+
+int getCursorPosition(int *rows, int *cols)
+{
+  // write the cursor position (6n) to STDIN
+  if (write(STDOUT_FILENO, "\x1b[6n", 4) != 4)
+    return -1;
+
+  printf("\r\n");
+  char c;
+
+  // read the cursor position back from STDIN and print it
+  while (read(STDIN_FILENO, &c, 1) == 1)
+  {
+    if (iscntrl(c))
+    {
+      printf("%d\r\n", c);
+    }
+    else
+    {
+      printf("%d ('%c')\r\n", c, c);
+    }
+  }
+  editorReadKey();
+  return -1;
+}
+
+int getWindowSize(int *rows, int *cols)
+{
+  struct winsize ws;
+
+  if (1 ||
+      // get window size, store in ws (if error, it returns -1)
+      ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1 ||
+      // safety check
+      ws.ws_col == 0)
+  {
+    // if the above didn't work, we'll have to get the window size ourselves.
+
+    // move cursor to the right and then down by 999
+    // the C & B escape commands don't let the cursor go off the screen,
+    // so this will move the cursor to the bottom right of the screen.
+    if (write(STDOUT_FILENO, "\x1b[999C\x1b[999B", 12) != 12)
+      return -1;
+
+    // get the position (passing the pointers)
+    return getCursorPosition(rows, cols);
+  }
+  else
+  {
+    // if we're here we got a window size and we can pass it back to the pointers
+    *cols = ws.ws_col;
+    *rows = ws.ws_row;
+    return 0;
+  }
 }
 
 /*** input ***/
