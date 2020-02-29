@@ -6,12 +6,35 @@
 #include <termios.h>
 #include <unistd.h>
 
+/*** defines ***/
+// takes the k char and sets the first 3 bytes to 0,
+// which is what the ctrl key does.
+#define CTRL_KEY(k) ((k)&0x1f)
+
 /*** data ***/
 struct termios orig_termios;
 
 /*** terminal ***/
+void editorRefreshScreen()
+{
+  // \x1b[ = escape sequence prefix
+  // J = erase in display
+  // 2 = entire screen
+  write(STDOUT_FILENO, "\x1b[2J", 4);
+  // H = reposition cursor (default 1, 1)
+  write(STDOUT_FILENO, "\x1b[H", 3);
+}
+
+void quit()
+{
+  editorRefreshScreen();
+  exit(0);
+}
+
 void die(const char *s)
 {
+
+  editorRefreshScreen();
   perror(s);
   exit(1);
 }
@@ -57,6 +80,38 @@ void enableRawMode()
     die("tcsetattr");
 }
 
+char editorReadKey()
+{
+  int nread;
+  char c;
+  // read input one character at a time, store in c var
+  /* read() gets the character and returns the length of what it got.
+  != 1 means that as soon as it gets any character it ends the loop
+  and returns the character */
+  while ((nread = read(STDIN_FILENO, &c, 1)) != 1)
+  {
+    if (nread == -1 && errno != EAGAIN)
+      die("read");
+  }
+  return c;
+}
+
+/*** input ***/
+void editorProcessKeypress()
+{
+  char c = editorReadKey();
+  switch (c)
+  {
+  case CTRL_KEY('x'):
+    // quit on 'ctrl+x'
+    // original tutorial has this as ctrl+q
+    // but vscode is using that and it doesn't work!!!
+    quit();
+    break;
+  }
+}
+
+/*** output ***/
 /*** init ***/
 int main()
 {
@@ -64,25 +119,8 @@ int main()
 
   while (1) // loop forever
   {
-    char c = '\0';
-
-    // read input one character at a time, store in c var
-    if (read(STDIN_FILENO, &c, 1) == -1 && errno != EAGAIN)
-      die("read");
-
-    // deal with c var
-    if (iscntrl(c))
-    {
-      // print just the number for control characters
-      printf("%d\r\n", c);
-    }
-    else
-    {
-      // print number and the character for printed characters
-      printf("%d ('%c')\r\n", c, c);
-    }
-    if (c == 'q') // quit on 'q'
-      break;
+    editorRefreshScreen();
+    editorProcessKeypress();
   };
   return 0;
 }
