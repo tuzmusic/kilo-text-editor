@@ -14,8 +14,10 @@
 /*** data ***/
 struct termios orig_termios;
 
+/*** escape sequences ***/
+
 /*** terminal ***/
-void editorRefreshScreen()
+void clearScreen()
 {
   // \x1b[ = escape sequence prefix
   // J = erase in display
@@ -27,14 +29,14 @@ void editorRefreshScreen()
 
 void quit()
 {
-  editorRefreshScreen();
+  clearScreen();
   exit(0);
 }
 
 void die(const char *s)
 {
 
-  editorRefreshScreen();
+  clearScreen();
   perror(s);
   exit(1);
 }
@@ -112,6 +114,26 @@ void editorProcessKeypress()
 }
 
 /*** output ***/
+
+void editorDrawRows()
+{
+  int y;
+  for (y = 0; y < 24; y++)
+  {
+    write(STDOUT_FILENO, "~\r\n", 3);
+  }
+
+  write(STDOUT_FILENO, "\x1b[H", 3);
+}
+
+void editorRefreshScreen()
+{
+  clearScreen();
+  editorDrawRows();
+
+  write(STDOUT_FILENO, "\x1b[H", 3);
+}
+
 /*** init ***/
 int main()
 {
