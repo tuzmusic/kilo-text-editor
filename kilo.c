@@ -3,6 +3,7 @@
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/ioctl.h>
 #include <termios.h>
 #include <unistd.h>
@@ -25,9 +26,7 @@ struct editorConfig
 
 struct editorConfig E;
 
-/*** escape sequences ***/
-
-/*** terminal ***/
+//region *** terminal ***/
 void clearScreen()
 {
   // \x1b[ = escape sequence prefix
@@ -45,7 +44,6 @@ void quit()
 
 void die(const char *s)
 {
-
   clearScreen();
   perror(s);
   exit(1);
@@ -114,13 +112,14 @@ int getCursorPosition(int *rows, int *cols)
   char buf[32];
   unsigned int i = 0;
 
-  // write the cursor position (6n) to STDIN
+  // get the cursor position (6n) and write it to STDIN
   if (write(STDOUT_FILENO, "\x1b[6n", 4) != 4)
     return -1;
 
-  // write a char from stdin to the buffer, up to the size of the buffer
   while (i < sizeof(buf) - 1)
   {
+    // write a char from stdin (the cursor position)
+    // to the buffer, up to the size of the buffer
     // if there's nothing more in the buffer, exit
     if (read(STDIN_FILENO, &buf[i], 1) != 1)
       break;
@@ -137,6 +136,7 @@ int getCursorPosition(int *rows, int *cols)
   if (buf[0] != '\x1b' || buf[1] != '[')
     return -1;
 
+  // print the cursor position, from the buffer
   // start at index 2, skipping escape and bracket
   // and pass the rest (a string in the format rows;cols) to sscanf
   // parse the string and put the values into rows and cols
@@ -158,7 +158,7 @@ int getWindowSize(int *rows, int *cols)
   {
     // if the above didn't work, we'll have to get the window size ourselves.
 
-    // move cursor to the right and then down by 999
+    // move cursor to the right and then down, both by 999
     // the C & B escape commands don't let the cursor go off the screen,
     // so this will move the cursor to the bottom right of the screen.
     if (write(STDOUT_FILENO, "\x1b[999C\x1b[999B", 12) != 12)
@@ -174,6 +174,40 @@ int getWindowSize(int *rows, int *cols)
     *rows = ws.ws_row;
     return 0;
   }
+}
+
+/*** append buffer ***/
+
+struct abuf
+{
+  char *b; // a pointer to the buffer (the first char in the buffer)
+  int len;
+};
+
+#define ABUF_INIT \
+  {               \
+    NULL, 0       \
+  }
+
+// takes a buffer to append to
+// and a pointer to the string to append,
+// and its length
+void abAppend(struct abuf *ab, const char *s, int len)
+{
+  // allocate memory
+  char *new = realloc(
+      ab->b,          // starting at the start of the buffer (containing its orig contents?)
+      ab->len + len); // and equal to the size it will be with the new string
+  // add the new characters to the end of the buffer
+  memcpy(&new[ab->len], s, len);
+  // store the new buffer
+  ab->b = new;
+  ab->len += len;
+}
+
+void abFree(struct abuf *ab)
+{
+  free(ab->b);
 }
 
 /*** input ***/
@@ -192,26 +226,33 @@ void editorProcessKeypress()
 }
 
 /*** output ***/
-
-void editorDrawRows()
+// @param a pointer to the buffer we're working with
+void editorDrawRows(struct abuf *ab)
 {
   int y;
   for (y = 0; y < E.screenrows; y++)
   {
-    write(STDOUT_FILENO, "~", 1);
+    abAppend(ab, "~", 1); // start the new row (in the buffer) with ~
+
     if (y < E.screenrows - 1)
     {
-      write(STDOUT_FILENO, "\r\n", 2);
+      abAppend(ab, "\r\n", 2); // go to the next line
     }
   }
 }
-
 void editorRefreshScreen()
 {
-  clearScreen();
-  editorDrawRows();
+  struct abuf ab = ABUF_INIT;
+  abAppend(&ab, "\x1b[2J", 4);
+  abAppend(&ab, "\x1b[H", 3);
 
-  CURSOR_TO_START();
+  editorDrawRows(&ab);
+
+  abAppend(&ab, "\x1b'H", 3);
+
+  write(STDOUT_FILENO, ab.b, ab.len);
+
+  abFree(&ab);
 }
 
 /*** init ***/
