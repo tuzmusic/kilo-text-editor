@@ -3,6 +3,7 @@
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/ioctl.h>
 #include <termios.h>
 #include <unistd.h>
 
@@ -11,8 +12,18 @@
 // which is what the ctrl key does.
 #define CTRL_KEY(k) ((k)&0x1f)
 
+// H = reposition cursor (default 1, 1)
+#define CURSOR_TO_START() (write(STDOUT_FILENO, "\x1b[H", 3))
+
 /*** data ***/
-struct termios orig_termios;
+struct editorConfig
+{
+  int screenrows;
+  int screencols;
+  struct termios orig_termios;
+};
+
+struct editorConfig E;
 
 /*** escape sequences ***/
 
@@ -23,8 +34,7 @@ void clearScreen()
   // J = erase in display
   // 2 = entire screen
   write(STDOUT_FILENO, "\x1b[2J", 4);
-  // H = reposition cursor (default 1, 1)
-  write(STDOUT_FILENO, "\x1b[H", 3);
+  CURSOR_TO_START();
 }
 
 void quit()
@@ -43,19 +53,19 @@ void die(const char *s)
 
 void disableRawMode()
 {
-  if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios) == -1)
+  if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &E.orig_termios) == -1)
     die("tcsetattr");
 }
 
 void enableRawMode()
 {
   // store the current state of the terminal in orig_termios
-  if (tcgetattr(STDIN_FILENO, &orig_termios) == -1)
+  if (tcgetattr(STDIN_FILENO, &E.orig_termios) == -1)
     die("tcgetattr");
 
   atexit(disableRawMode); // restore it when we exit
 
-  struct termios raw = orig_termios;
+  struct termios raw = E.orig_termios;
 
   // ICRNL:  disable ctrl+m & enter (carriage return, new line)
   // IXON: disable flow control (ctrl+s/q)
@@ -80,6 +90,21 @@ void enableRawMode()
   // write to raw
   if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) == -1)
     die("tcsetattr");
+}
+
+int getWindowSize(int *rows, int *cols)
+{
+  struct winsize ws;
+
+  // get window size, store in ws
+  if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0)
+  {
+    return -1;
+  }
+
+  *cols = ws.ws_col;
+  *rows = ws.ws_row;
+  return 0;
 }
 
 char editorReadKey()
@@ -118,12 +143,10 @@ void editorProcessKeypress()
 void editorDrawRows()
 {
   int y;
-  for (y = 0; y < 24; y++)
+  for (y = 0; y < E.screenrows; y++)
   {
     write(STDOUT_FILENO, "~\r\n", 3);
   }
-
-  write(STDOUT_FILENO, "\x1b[H", 3);
 }
 
 void editorRefreshScreen()
@@ -131,13 +154,22 @@ void editorRefreshScreen()
   clearScreen();
   editorDrawRows();
 
-  write(STDOUT_FILENO, "\x1b[H", 3);
+  CURSOR_TO_START();
 }
 
 /*** init ***/
+
+void initEditor()
+{
+  // get window size, store in editor config, crash on error
+  if (getWindowSize(&E.screenrows, &E.screencols) == -1)
+    die("getWindowSize");
+}
+
 int main()
 {
   enableRawMode();
+  initEditor();
 
   while (1) // loop forever
   {
