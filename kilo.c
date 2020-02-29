@@ -110,35 +110,48 @@ char editorReadKey()
 
 int getCursorPosition(int *rows, int *cols)
 {
+  // initialize a buffer and its index
+  char buf[32];
+  unsigned int i = 0;
+
   // write the cursor position (6n) to STDIN
   if (write(STDOUT_FILENO, "\x1b[6n", 4) != 4)
     return -1;
 
-  printf("\r\n");
-  char c;
-
-  // read the cursor position back from STDIN and print it
-  while (read(STDIN_FILENO, &c, 1) == 1)
+  // write a char from stdin to the buffer, up to the size of the buffer
+  while (i < sizeof(buf) - 1)
   {
-    if (iscntrl(c))
-    {
-      printf("%d\r\n", c);
-    }
-    else
-    {
-      printf("%d ('%c')\r\n", c, c);
-    }
+    // if there's nothing more in the buffer, exit
+    if (read(STDIN_FILENO, &buf[i], 1) != 1)
+      break;
+    // if it's R, exit
+    if (buf[i] == 'R')
+      break;
+    i++;
   }
-  editorReadKey();
-  return -1;
+
+  // close the buffer
+  buf[i] = '\0';
+
+  // safety check
+  if (buf[0] != '\x1b' || buf[1] != '[')
+    return -1;
+
+  // start at index 2, skipping escape and bracket
+  // and pass the rest (a string in the format rows;cols) to sscanf
+  // parse the string and put the values into rows and cols
+  if (sscanf(&buf[2], "%d;%d", rows, cols) != 2)
+    return -1;
+
+  return 0;
 }
 
 int getWindowSize(int *rows, int *cols)
 {
   struct winsize ws;
 
-  if (1 ||
-      // get window size, store in ws (if error, it returns -1)
+  if (
+      // get window size, store in ws
       ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1 ||
       // safety check
       ws.ws_col == 0)
@@ -185,7 +198,11 @@ void editorDrawRows()
   int y;
   for (y = 0; y < E.screenrows; y++)
   {
-    write(STDOUT_FILENO, "~\r\n", 3);
+    write(STDOUT_FILENO, "~", 1);
+    if (y < E.screenrows - 1)
+    {
+      write(STDOUT_FILENO, "\r\n", 2);
+    }
   }
 }
 
