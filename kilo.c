@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
+#include <sys/types.h>
 #include <termios.h>
 #include <unistd.h>
 
@@ -47,11 +48,20 @@ enum editorKey
 };
 
 /*** data ***/
+
+typedef struct erow
+{
+  int size;
+  char *chars;
+} erow;
+
 struct editorConfig
 {
   int cx, cy; // cursor position
   int screenrows;
   int screencols;
+  int numrows;
+  erow row;
   struct termios orig_termios;
 };
 
@@ -280,6 +290,20 @@ int getWindowSize(int *rows, int *cols)
   }
 }
 
+/*** file i/o ***/
+
+void editorOpen()
+{
+  char *line = "Hello, world!"; // placeholder line
+  ssize_t linelen = 13;
+
+  E.row.size = linelen;
+  E.row.chars = malloc(linelen + 1);  // allocate memory for the line
+  memcpy(E.row.chars, line, linelen); // store the line
+  E.row.chars[linelen] = '\0';        // close at the end of the line
+  E.numrows = 1;
+}
+
 /*** append buffer ***/
 
 struct abuf
@@ -406,13 +430,23 @@ void editorDrawRows(struct abuf *ab)
   int y;
   for (y = 0; y < E.screenrows; y++)
   {
-    if (y == E.screenrows / 3) // print the welcome message 1/3 down the screen
+    if (y >= E.numrows)
     {
-      printWelcome(ab);
+      if (y == E.screenrows / 3) // print the welcome message 1/3 down the screen
+      {
+        printWelcome(ab);
+      }
+      else
+      {
+        abAppend(ab, "~", 1); // start the new row (in the buffer) with ~
+      }
     }
     else
     {
-      abAppend(ab, "~", 1); // start the new row (in the buffer) with ~
+      int len = E.row.size;
+      if (len > E.screencols)
+        len = E.screencols;           // limit line length to screen width
+      abAppend(ab, E.row.chars, len); // add line to the buffer
     }
 
     abAppend(ab, "\x1b[K", 3); // clear the rest of the row
@@ -454,6 +488,7 @@ void initEditor()
 {
   E.cx = 0;
   E.cy = 0;
+  E.numrows = 0;
 
   // get window size, store in editor config, crash on error
   if (getWindowSize(&E.screenrows, &E.screencols) == -1)
@@ -464,6 +499,7 @@ int main()
 {
   enableRawMode();
   initEditor();
+  editorOpen();
 
   while (1) // loop forever
   {
