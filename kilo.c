@@ -18,12 +18,14 @@
 // H = reposition cursor (default 1, 1)
 #define CURSOR_TO_START() (write(STDOUT_FILENO, "\x1b[H", 3))
 
+// use numbers outside the character range
+// to stand in for the arrow keys
 enum editorKey
 {
-  ARROW_LEFT = 'a',
-  ARROW_RIGHT = 'd',
-  ARROW_UP = 'w',
-  ARROW_DOWN = 's',
+  ARROW_LEFT = 1000,
+  ARROW_RIGHT,
+  ARROW_UP,
+  ARROW_DOWN,
 };
 
 /*** data ***/
@@ -101,7 +103,7 @@ void enableRawMode()
     die("tcsetattr");
 }
 
-char editorReadKey()
+int editorReadKey()
 {
   int nread;
   char c;
@@ -126,7 +128,9 @@ char editorReadKey()
 
     if (seq[0] == '[')
     {
-      switch (seq[1]) // if the escape char is an arrow key
+      // if the escape char is an arrow key, return the corresponding
+      // arrow key keynum value
+      switch (seq[1])
       {
       case 'A':
         return ARROW_UP;
@@ -252,28 +256,32 @@ void abFree(struct abuf *ab)
 
 /*** input ***/
 
-void editorMoveCursor(char key)
+void editorMoveCursor(int32_t key)
 {
   switch (key)
   {
   case ARROW_LEFT:
-    E.cx--;
+    if (E.cx != 0)
+      E.cx--;
     break;
   case ARROW_RIGHT:
-    E.cy++;
+    if (E.cx != E.screencols - 1)
+      E.cx++;
     break;
   case ARROW_UP:
-    E.cy--;
+    if (E.cy != 0)
+      E.cy--;
     break;
   case ARROW_DOWN:
-    E.cx++;
+    if (E.cy != E.screenrows - 1)
+      E.cy++;
     break;
   }
 }
 
 void editorProcessKeypress()
 {
-  char c = editorReadKey();
+  int c = editorReadKey();
   switch (c)
   {
   case CTRL_KEY('x'):
