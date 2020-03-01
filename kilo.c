@@ -18,14 +18,28 @@
 // H = reposition cursor (default 1, 1)
 #define CURSOR_TO_START() (write(STDOUT_FILENO, "\x1b[H", 3))
 
+enum escapes
+{
+  ESC_SEQ = '\x1b',
+  ARR_UP_SEQ = 'A',
+  ARR_DOWN_SEQ = 'B',
+  ARR_RIGHT_SEQ = 'C',
+  ARR_LEFT_SEQ = 'D',
+};
+
 // use numbers outside the character range
-// to stand in for the arrow keys
+// to stand in for special keys
 enum editorKey
 {
   ARROW_LEFT = 1000,
   ARROW_RIGHT,
   ARROW_UP,
   ARROW_DOWN,
+  PAGE_UP,
+  PAGE_DOWN,
+  HOME,
+  END,
+  DELETE
 };
 
 /*** data ***/
@@ -128,6 +142,13 @@ int editorReadKey()
 
     if (seq[0] == '[')
     {
+      // if the escape is a number
+      if (seq[1] >= '0' && seq[1] <= '9')
+      {
+        if (read(STDIN_FILENO, &seq[2], 1) != 1)
+          return '\x1b';
+      }
+
       // if the escape char is an arrow key, return the corresponding
       // arrow key keynum value
       switch (seq[1])
