@@ -27,6 +27,8 @@ enum escapes
   ARR_LEFT_SEQ = 'D',
   PAGE_UP_SEQ = '5',
   PAGE_DOWN_SEQ = '6',
+  HOME_KEY_SEQ_H = 'H',
+  END_KEY_SEQ_F = 'F',
 };
 
 // use numbers outside the character range
@@ -37,11 +39,11 @@ enum editorKey
   ARROW_RIGHT,
   ARROW_UP,
   ARROW_DOWN,
+  HOME_KEY,
+  END_KEY,
   PAGE_UP,
   PAGE_DOWN,
-  HOME,
-  END,
-  DELETE
+  DELETE_KEY
 };
 
 /*** data ***/
@@ -136,43 +138,68 @@ int editorReadKey()
   if (c == ESC_SEQ) // if an escape char was typed
   {
     char seq[3];
-    // if there's no next key, then it's just the actual escape key
+    // read next char into seq[0]
+    // if there's no next char, then it's just the actual escape key
     if (read(STDIN_FILENO, &seq[0], 1) != 1)
       return ESC_SEQ;
+    // store the remaining chars to seq?
     if (read(STDIN_FILENO, &seq[1], 1) != 1)
       return ESC_SEQ;
 
-    if (seq[0] == '[')
+    if (seq[0] == '[') // escape seqs start with [
     {
-      // if the escape is a number
+      // if next char is a number
       if (seq[1] >= '0' && seq[1] <= '9')
       {
+        // read the next char into seq[2]
         if (read(STDIN_FILENO, &seq[2], 1) != 1)
           return ESC_SEQ;
-        if (seq[2] == '~')
+        if (seq[2] == '~') // if the 3rd char of the escape is ~
         {
           switch (seq[1])
           {
-          case PAGE_UP_SEQ:
+          case '1': // <esc>[1~
+            return HOME_KEY;
+          case '3': // <esc>[3~
+            return DELETE_KEY;
+          case '4': // <esc>[4~
+            return END_KEY;
+          case '5': // <esc>[5~
             return PAGE_UP;
-          case PAGE_DOWN_SEQ:
+          case '6': // <esc>[6~
             return PAGE_DOWN;
+          case '7': // <esc>[7~
+            return HOME_KEY;
+          case '8': // <esc>[8~
+            return END_KEY;
           }
         }
       }
-
-      // if the escape char is an arrow key, return the corresponding
-      // arrow key keynum value
-      switch (seq[1])
+      else if (seq[0] == 'O')
       {
-      case ARR_UP_SEQ:
-        return ARROW_UP;
-      case ARR_DOWN_SEQ:
-        return ARROW_DOWN;
-      case ARR_RIGHT_SEQ:
-        return ARROW_RIGHT;
-      case ARR_LEFT_SEQ:
-        return ARROW_LEFT;
+        switch (seq[1])
+        {
+        case HOME_KEY_SEQ_H:
+          return HOME_KEY;
+        case END_KEY_SEQ_F:
+          return END_KEY;
+        }
+      }
+      else
+      {
+        // if the escape char is an arrow key, return the corresponding
+        // arrow key keynum value
+        switch (seq[1])
+        {
+        case ARR_UP_SEQ:
+          return ARROW_UP;
+        case ARR_DOWN_SEQ:
+          return ARROW_DOWN;
+        case ARR_RIGHT_SEQ:
+          return ARROW_RIGHT;
+        case ARR_LEFT_SEQ:
+          return ARROW_LEFT;
+        }
       }
     }
     return ESC_SEQ;
@@ -315,14 +342,32 @@ void editorMoveCursor(int32_t key)
 void editorProcessKeypress()
 {
   int c = editorReadKey();
+
   switch (c)
   {
-  case CTRL_KEY('x'):
-    // quit on 'ctrl+x'
+  case CTRL_KEY('x'): // QUIT
     // original tutorial has this as ctrl+q
     // but vscode is using that and it doesn't work!!!
     quit();
     break;
+
+  case HOME_KEY:
+    E.cx = 0;
+    break;
+
+  case END_KEY:
+    E.cx = E.screencols - 1;
+    break;
+
+  case PAGE_UP:
+  case PAGE_DOWN:
+  { // create block scope for the times variable
+    // move until we get to the top or bottom of the screen
+    int times = E.screenrows;
+    while (times--)
+      editorMoveCursor(c == PAGE_UP ? ARROW_UP : ARROW_DOWN);
+  }
+  break;
 
   case ARROW_LEFT:
   case ARROW_RIGHT:
