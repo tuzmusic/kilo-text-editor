@@ -106,7 +106,36 @@ char editorReadKey()
     if (nread == -1 && errno != EAGAIN)
       die("read");
   }
-  return c;
+
+  if (c == '\x1b') // if an escape char was typed
+  {
+    char seq[3];
+    // if there's no next key, then it's just the actual escape key
+    if (read(STDIN_FILENO, &seq[0], 1) != 1)
+      return '\x1b';
+    if (read(STDIN_FILENO, &seq[1], 1) != 1)
+      return '\x1b';
+
+    if (seq[0] == '[')
+    {
+      switch (seq[1]) // if the escape char is an arrow key
+      {
+      case 'A':
+        return 'w';
+      case 'B':
+        return 's';
+      case 'C':
+        return 'd';
+      case 'D':
+        return 'a';
+      }
+    }
+    return '\x1b';
+  }
+  else
+  {
+    return c;
+  }
 }
 
 int getCursorPosition(int *rows, int *cols)
