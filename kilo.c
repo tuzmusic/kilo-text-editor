@@ -25,6 +25,8 @@ enum escapes
   ARR_DOWN_SEQ = 'B',
   ARR_RIGHT_SEQ = 'C',
   ARR_LEFT_SEQ = 'D',
+  PAGE_UP_SEQ = '5',
+  PAGE_DOWN_SEQ = '6',
 };
 
 // use numbers outside the character range
@@ -131,14 +133,14 @@ int editorReadKey()
       die("read");
   }
 
-  if (c == '\x1b') // if an escape char was typed
+  if (c == ESC_SEQ) // if an escape char was typed
   {
     char seq[3];
     // if there's no next key, then it's just the actual escape key
     if (read(STDIN_FILENO, &seq[0], 1) != 1)
-      return '\x1b';
+      return ESC_SEQ;
     if (read(STDIN_FILENO, &seq[1], 1) != 1)
-      return '\x1b';
+      return ESC_SEQ;
 
     if (seq[0] == '[')
     {
@@ -146,24 +148,34 @@ int editorReadKey()
       if (seq[1] >= '0' && seq[1] <= '9')
       {
         if (read(STDIN_FILENO, &seq[2], 1) != 1)
-          return '\x1b';
+          return ESC_SEQ;
+        if (seq[2] == '~')
+        {
+          switch (seq[1])
+          {
+          case PAGE_UP_SEQ:
+            return PAGE_UP;
+          case PAGE_DOWN_SEQ:
+            return PAGE_DOWN;
+          }
+        }
       }
 
       // if the escape char is an arrow key, return the corresponding
       // arrow key keynum value
       switch (seq[1])
       {
-      case 'A':
+      case ARR_UP_SEQ:
         return ARROW_UP;
-      case 'B':
+      case ARR_DOWN_SEQ:
         return ARROW_DOWN;
-      case 'C':
+      case ARR_RIGHT_SEQ:
         return ARROW_RIGHT;
-      case 'D':
+      case ARR_LEFT_SEQ:
         return ARROW_LEFT;
       }
     }
-    return '\x1b';
+    return ESC_SEQ;
   }
   else
   {
@@ -198,7 +210,7 @@ int getCursorPosition(int *rows, int *cols)
   buf[i] = '\0';
 
   // safety check
-  if (buf[0] != '\x1b' || buf[1] != '[')
+  if (buf[0] != ESC_SEQ || buf[1] != '[')
     return -1;
 
   // print the cursor position, from the buffer
