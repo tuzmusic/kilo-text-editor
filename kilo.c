@@ -9,6 +9,8 @@
 #include <unistd.h>
 
 /*** defines ***/
+#define KILO_VERSION "0.0.1"
+
 // takes the k char and sets the first 3 bytes to 0,
 // which is what the ctrl key does.
 #define CTRL_KEY(k) ((k)&0x1f)
@@ -226,13 +228,43 @@ void editorProcessKeypress()
 }
 
 /*** output ***/
-// @param a pointer to the buffer we're working with
+void printWelcome(struct abuf *ab)
+{
+  char welcome[80]; // allocate a string for the welcome message
+  int welcomelen = snprintf(welcome, sizeof(welcome),
+                            "Kilo editor -- version %s", KILO_VERSION);
+  if (welcomelen > E.screencols)
+    welcomelen = E.screencols; // truncate if not enough room
+
+  int padding = (E.screencols - welcomelen) / 2;
+  if (padding) // start the welcome line with a tilde
+  {
+    abAppend(ab, "~", 1);
+    padding--;
+  }
+  // add the left padding
+  while (padding--)
+    abAppend(ab, " ", 1);
+
+  // add welcome to ab in the length of welcomelen
+  abAppend(ab, welcome, welcomelen);
+}
+
 void editorDrawRows(struct abuf *ab)
 {
   int y;
   for (y = 0; y < E.screenrows; y++)
   {
-    abAppend(ab, "~", 1); // start the new row (in the buffer) with ~
+    if (y == E.screenrows / 3) // print the welcome message 1/3 down the screen
+    {
+      printWelcome(ab);
+    }
+    else
+    {
+      abAppend(ab, "~", 1); // start the new row (in the buffer) with ~
+    }
+
+    abAppend(ab, "\x1b[K", 3); // clear the rest of the row
 
     if (y < E.screenrows - 1)
     {
@@ -240,19 +272,23 @@ void editorDrawRows(struct abuf *ab)
     }
   }
 }
+
 void editorRefreshScreen()
 {
   struct abuf ab = ABUF_INIT;
-  abAppend(&ab, "\x1b[2J", 4);
-  abAppend(&ab, "\x1b[H", 3);
 
-  editorDrawRows(&ab);
+  // TODO: replace these with clearScreen?
+  abAppend(&ab, "\x1b[?25l", 6); // remove cursor from the screen
+  abAppend(&ab, "\x1b[H", 3);    // move cursor to start
 
-  abAppend(&ab, "\x1b'H", 3);
+  editorDrawRows(&ab); // draw the tildes
 
-  write(STDOUT_FILENO, ab.b, ab.len);
+  abAppend(&ab, "\x1b[H", 3);    // move cursor to start
+  abAppend(&ab, "\x1b[?25h", 6); // add cursor back to screen
 
-  abFree(&ab);
+  write(STDOUT_FILENO, ab.b, ab.len); // write from the buffer
+
+  abFree(&ab); // free up the buffer
 }
 
 /*** init ***/
