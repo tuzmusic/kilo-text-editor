@@ -18,6 +18,14 @@
 // H = reposition cursor (default 1, 1)
 #define CURSOR_TO_START() (write(STDOUT_FILENO, "\x1b[H", 3))
 
+enum editorKey
+{
+  ARROW_LEFT = 'a',
+  ARROW_RIGHT = 'd',
+  ARROW_UP = 'w',
+  ARROW_DOWN = 's',
+};
+
 /*** data ***/
 struct editorConfig
 {
@@ -121,13 +129,13 @@ char editorReadKey()
       switch (seq[1]) // if the escape char is an arrow key
       {
       case 'A':
-        return 'w';
+        return ARROW_UP;
       case 'B':
-        return 's';
+        return ARROW_DOWN;
       case 'C':
-        return 'd';
+        return ARROW_RIGHT;
       case 'D':
-        return 'a';
+        return ARROW_LEFT;
       }
     }
     return '\x1b';
@@ -248,16 +256,16 @@ void editorMoveCursor(char key)
 {
   switch (key)
   {
-  case 'a':
+  case ARROW_LEFT:
     E.cx--;
     break;
-  case 's':
+  case ARROW_RIGHT:
     E.cy++;
     break;
-  case 'w':
+  case ARROW_UP:
     E.cy--;
     break;
-  case 'd':
+  case ARROW_DOWN:
     E.cx++;
     break;
   }
@@ -275,10 +283,10 @@ void editorProcessKeypress()
     quit();
     break;
 
-  case 'w':
-  case 's':
-  case 'a':
-  case 'd':
+  case ARROW_LEFT:
+  case ARROW_RIGHT:
+  case ARROW_UP:
+  case ARROW_DOWN:
     editorMoveCursor(c);
     break;
   }
