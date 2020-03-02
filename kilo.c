@@ -1,4 +1,8 @@
 /*** includes ***/
+#define _DEFAULT_SOURCE
+#define _BSD_SOURCE
+#define _GNU_SOURCE
+
 #include <ctype.h>
 #include <errno.h>
 #include <stdio.h>
@@ -292,16 +296,35 @@ int getWindowSize(int *rows, int *cols)
 
 /*** file i/o ***/
 
-void editorOpen()
+void editorOpen(char *filename)
 {
-  char *line = "Hello, world!"; // placeholder line
-  ssize_t linelen = 13;
+  FILE *fp = fopen(filename, "r");
+  if (!fp)
+    die("fopen");
 
-  E.row.size = linelen;
-  E.row.chars = malloc(linelen + 1);  // allocate memory for the line
-  memcpy(E.row.chars, line, linelen); // store the line
-  E.row.chars[linelen] = '\0';        // close at the end of the line
-  E.numrows = 1;
+  char *line = NULL;
+  size_t linecapacity = 0;
+  ssize_t linelen;
+  // read line at the line pointer
+  // set linecapacity to the (previously unknown) size of the line (?)
+  // return the line's length
+  linelen = getline(&line, &linecapacity, fp);
+
+  if (linelen != -1)
+  {
+    // remove line breaks from the end of the line
+    while (linelen > 0 && (line[linelen - 1] == '\n' ||
+                           line[linelen - 1] == '\r'))
+      linelen--;
+
+    E.row.size = linelen;
+    E.row.chars = malloc(linelen + 1);  // allocate memory for the line
+    memcpy(E.row.chars, line, linelen); // store the line
+    E.row.chars[linelen] = '\0';        // close at the end of the line
+    E.numrows = 1;
+  }
+  free(line);
+  fclose(fp);
 }
 
 /*** append buffer ***/
@@ -432,7 +455,7 @@ void editorDrawRows(struct abuf *ab)
   {
     if (y >= E.numrows)
     {
-      if (y == E.screenrows / 3) // print the welcome message 1/3 down the screen
+      if (E.numrows == 0 && y == E.screenrows / 3) // print the welcome message 1/3 down the screen, if we haven't loaded a file
       {
         printWelcome(ab);
       }
@@ -495,11 +518,15 @@ void initEditor()
     die("getWindowSize");
 }
 
-int main()
+int main(int argc, char *argv[])
 {
   enableRawMode();
   initEditor();
-  editorOpen();
+
+  // if we have a filename, open the file.
+  // (else, we'll have a blank file)
+  if (argc >= 2)
+    editorOpen(argv[1]);
 
   while (1) // loop forever
   {
